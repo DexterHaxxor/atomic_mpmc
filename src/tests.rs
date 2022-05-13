@@ -39,7 +39,6 @@ fn test_value_drop() {
     impl Drop for Dropper {
         fn drop(&mut self) {
             self.0.fetch_add(1, Ordering::SeqCst);
-            println!("dropped");
         }
     }
 
@@ -62,4 +61,26 @@ fn test_value_drop() {
     handle.join().unwrap();
     
     assert_eq!(v.load(Ordering::SeqCst), 7);
+}
+
+#[test]
+fn test_receiver_hang_up() {
+    let (sender, receiver) = channel::<u32>(1);
+
+    sender.send(1).unwrap();
+    assert_eq!(receiver.recv().unwrap(), 1);
+
+    drop(receiver);
+    assert!(sender.send(2).is_err());
+}
+
+#[test]
+fn test_sender_hang_up() {
+    let (sender, receiver) = channel::<u32>(1);
+
+    sender.send(1).unwrap();
+    assert_eq!(receiver.recv().unwrap(), 1);
+
+    drop(sender);
+    assert!(receiver.recv().is_err());
 }

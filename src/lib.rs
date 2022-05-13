@@ -220,12 +220,12 @@ impl<T> Channel<T> {
 
     #[inline(always)]
     fn read(&self) -> Result<T, RecvError> {
-        self.check_senders()?;
         self.readable.wait();
 
         let node = self.get_node(&self.read);
 
         if !node.hot() {
+            self.check_senders()?;
             self.readable.reset();
             self.readable.wait();
         }
@@ -242,11 +242,11 @@ impl<T> Channel<T> {
 
     #[inline(always)]
     fn try_read(&self) -> Result<T, RecvError> {
-        self.check_senders()?;
         loop {
             let node = self.try_node(&self.read);
 
             if !node.0.hot() {
+                self.check_senders()?;
                 self.readable.reset();
                 // Return error when the channel is empty
                 return Err(RecvError(ErrorCause::WouldBlock));
