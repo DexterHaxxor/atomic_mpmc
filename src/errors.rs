@@ -2,7 +2,7 @@ use std::{error::Error, fmt};
 
 // for documentation
 #[allow(unused_imports)]
-use super::Sender;
+use super::{Sender, Receiver};
 
 /// Cause of a [`SendError`] or [`RecvError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
