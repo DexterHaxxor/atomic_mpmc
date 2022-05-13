@@ -1,4 +1,4 @@
-use std::mem::forget;
+use std::{mem::forget, cell::Cell};
 
 use super::*;
 
@@ -33,23 +33,20 @@ fn test_read_blocking() {
 
 #[test]
 fn test_value_drop() {
-    let v = Arc::new(AtomicUsize::new(0));
-    struct Dropper(Arc<AtomicUsize>);
+    let v = Cell::new(0);
+    struct Dropper<'a>(&'a Cell<u32>);
 
-    impl Drop for Dropper {
+    impl<'a> Drop for Dropper<'a> {
         fn drop(&mut self) {
-            self.0.fetch_add(1, Ordering::SeqCst);
+            self.0.set(self.0.get() + 1);
         }
     }
 
     let (sender, receiver) = channel::<Dropper>(10);
 
-    let vc = v.clone();
-    let handle = std::thread::spawn(move || {
-        for _ in 0..10 {
-            sender.send(Dropper(vc.clone())).unwrap();
-        }
-    });
+    for _ in 0..10 {
+        sender.send(Dropper(&v)).unwrap();
+    }
 
     for _ in 0..3 {
         // Forget 3 values.
@@ -57,10 +54,10 @@ fn test_value_drop() {
     }
 
     // Drop the rest of the values.
+    drop(sender);
     drop(receiver);
-    handle.join().unwrap();
     
-    assert_eq!(v.load(Ordering::SeqCst), 7);
+    assert_eq!(v.get(), 7);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "atomic_mpmc"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = [ "dexterfoxy" ]
 description = "Atomic Multi-Producer Multi-Consumer Queue"

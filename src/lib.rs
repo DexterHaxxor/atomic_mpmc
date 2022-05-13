@@ -77,7 +77,7 @@ impl<T> Drop for Node<T> {
             // SAFETY: This is safe because hot is only ever set to true
             // after the data is initialized.
             if self.hot() {
-                ptr::drop_in_place(self.data.as_mut_ptr());
+                ptr::drop_in_place(self.data());
             }
         }
     }
