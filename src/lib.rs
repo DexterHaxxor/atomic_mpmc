@@ -1,7 +1,7 @@
 //! Fast, atomic, multi-producer, multi-consumer queue.
 //!
-//! This is a queue which supports multiple producers and consumers,
-//! even from different threads. It works as a FIFO queue, in a circular
+//! It which supports multiple producers and consumers,
+//! even from different threads. It functions as a FIFO queue in a fixed circular
 //! buffer. The [`Sender`] and [`Receiver`] types are used to send and
 //! receive values, and they implement [`Send`], [`Sync`], and [`Clone`].
 //!
@@ -50,16 +50,6 @@ impl<T> Default for Node<T> {
 
 impl<T> Node<T> {
     #[inline(always)]
-    fn hot(&self) -> bool {
-        self.hot.load(Ordering::Relaxed)
-    }
-
-    #[inline(always)]
-    fn set_hot(&self, hot: bool) {
-        self.hot.store(hot, Ordering::Relaxed);
-    }
-
-    #[inline(always)]
     fn data(&self) -> *mut T {
         UnsafeCell::raw_get(self.data.as_ptr())
     }
@@ -67,7 +57,9 @@ impl<T> Node<T> {
 
 impl<T> core::fmt::Debug for Node<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Node").field("hot", &self.hot()).finish()
+        f.debug_struct("Node")
+            .field("hot", &self.hot.load(Ordering::Relaxed))
+            .finish()
     }
 }
 
@@ -76,7 +68,7 @@ impl<T> Drop for Node<T> {
         unsafe {
             // SAFETY: This is safe because hot is only ever set to true
             // after the data is initialized.
-            if self.hot() {
+            if self.hot.load(Ordering::Relaxed) {
                 ptr::drop_in_place(self.data());
             }
         }
@@ -144,13 +136,13 @@ impl<T> Channel<T> {
         unsafe {
             // SAFETY: The index is always in bounds, because of the modulo.
             self.data
-                .get_unchecked(from.fetch_add(1, Ordering::Relaxed) % self.data.len())
+                .get_unchecked(from.fetch_add(1, Ordering::AcqRel) % self.data.len())
         }
     }
 
     #[inline(always)]
     fn try_node<'a>(&'a self, from: &AtomicUsize) -> (&'a Node<T>, usize) {
-        let index = from.load(Ordering::Relaxed);
+        let index = from.load(Ordering::Acquire);
 
         (
             unsafe {
@@ -168,7 +160,7 @@ impl<T> Channel<T> {
 
         let node = self.get_node(&self.write);
 
-        if node.hot() {
+        if node.hot.load(Ordering::Acquire) {
             self.writable.reset();
             self.writable.wait();
         }
@@ -178,7 +170,7 @@ impl<T> Channel<T> {
             ptr::write(node.data(), value);
         }
 
-        node.set_hot(true);
+        node.hot.store(true, Ordering::Release);
         self.readable.set();
 
         Ok(())
@@ -190,7 +182,7 @@ impl<T> Channel<T> {
         loop {
             let node = self.try_node(&self.write);
 
-            if node.0.hot() {
+            if node.0.hot.load(Ordering::Acquire) {
                 self.writable.reset();
                 // Return error when the channel is full
                 return Err(SendError(value, ErrorCause::WouldBlock));
@@ -199,7 +191,7 @@ impl<T> Channel<T> {
             if let Err(_) = self.write.compare_exchange(
                 node.1,
                 node.1 + 1,
-                Ordering::Relaxed,
+                Ordering::Release,
                 Ordering::Relaxed,
             ) {
                 // A thread stole the node, try again...
@@ -211,7 +203,7 @@ impl<T> Channel<T> {
                 ptr::write(node.0.data(), value);
             }
 
-            node.0.set_hot(true);
+            node.0.hot.store(true, Ordering::Release);
             self.readable.set();
 
             return Ok(());
@@ -224,7 +216,7 @@ impl<T> Channel<T> {
 
         let node = self.get_node(&self.read);
 
-        if !node.hot() {
+        if !node.hot.load(Ordering::Acquire) {
             self.check_senders()?;
             self.readable.reset();
             self.readable.wait();
@@ -234,7 +226,7 @@ impl<T> Channel<T> {
             // SAFETY: The node is hot, so it is safe to read from it.
             ptr::read(node.data())
         };
-        node.set_hot(false);
+        node.hot.store(false, Ordering::Release);
         self.writable.set();
 
         Ok(value)
@@ -245,7 +237,7 @@ impl<T> Channel<T> {
         loop {
             let node = self.try_node(&self.read);
 
-            if !node.0.hot() {
+            if !node.0.hot.load(Ordering::Acquire) {
                 self.check_senders()?;
                 self.readable.reset();
                 // Return error when the channel is empty
@@ -254,7 +246,7 @@ impl<T> Channel<T> {
 
             if let Err(_) =
                 self.read
-                    .compare_exchange(node.1, node.1 + 1, Ordering::Relaxed, Ordering::Relaxed)
+                    .compare_exchange(node.1, node.1 + 1, Ordering::Release, Ordering::Relaxed)
             {
                 // A thread stole the node, try again...
                 continue;
@@ -264,7 +256,7 @@ impl<T> Channel<T> {
                 // SAFETY: The node is hot, so it is safe to read from it.
                 ptr::read(node.0.data())
             };
-            node.0.set_hot(false);
+            node.0.hot.store(false, Ordering::Release);
             self.writable.set();
 
             return Ok(value);
@@ -450,7 +442,7 @@ impl<T> Clone for Receiver<T> {
 
 /// Creates a multi-producer, multi-consumer channel.
 ///
-/// This channel has a buffer of size `capacity`,
+/// The channel will have a buffer of size `capacity`
 /// and any writes beyond that will block until a read is performed.
 ///
 /// The [`Sender`] and [`Receiver`] returned by this function are

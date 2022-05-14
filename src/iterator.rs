@@ -1,5 +1,5 @@
-use std::iter::FusedIterator;
 use sealed::sealed;
+use std::iter::FusedIterator;
 
 use crate::{Receiver, RecvError};
 
@@ -56,7 +56,7 @@ impl<R: Recv> Iterator for Iter<R> {
             Some(Err(_)) => {
                 self.0 = None;
                 None
-            },
+            }
             None => None,
         }
     }
@@ -84,7 +84,7 @@ impl<R: Recv> Iterator for TryIter<R> {
             Some(Err(_)) => {
                 self.0 = None;
                 None
-            },
+            }
             None => None,
         }
     }

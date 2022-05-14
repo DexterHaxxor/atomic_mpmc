@@ -1,4 +1,4 @@
-use std::{mem::forget, cell::Cell};
+use std::{cell::Cell, mem::forget};
 
 use super::*;
 
@@ -17,7 +17,7 @@ fn test_read_and_write() {
 #[cfg_attr(miri, ignore)]
 fn test_read_blocking() {
     let (sender, receiver) = channel::<Vec<u32>>(3);
-    
+
     std::thread::spawn(move || {
         for i in 0..10 {
             sender.send(vec![i]).unwrap();
@@ -56,7 +56,7 @@ fn test_value_drop() {
     // Drop the rest of the values.
     drop(sender);
     drop(receiver);
-    
+
     assert_eq!(v.get(), 7);
 }
 
