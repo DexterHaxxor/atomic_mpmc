@@ -1,6 +1,6 @@
 //! Fast, atomic, multi-producer, multi-consumer queue.
 //!
-//! It which supports multiple producers and consumers,
+//! It supports multiple producers and consumers,
 //! even from different threads. It functions as a FIFO queue in a fixed circular
 //! buffer. The [`Sender`] and [`Receiver`] types are used to send and
 //! receive values, and they implement [`Send`], [`Sync`], and [`Clone`].
